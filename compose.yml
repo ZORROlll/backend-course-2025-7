@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    container_name: backend-app
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
+
+  db:
+    image: mysql:8.0
+    container_name: backend-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: backend_db
+      MYSQL_USER: backend_user
+      MYSQL_PASSWORD: backend_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
