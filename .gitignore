@@ -1,0 +1,33 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Logs
+logs
+*.log
+
+# ENV files (не можна комітити !!)
+.env
+.env.local
+.env.production
+.env.development
+
+# Docker
+docker-compose.override.yml
+*.pid
+
+# Cache
+.cache/
+tmp/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.idea/
+.vscode/

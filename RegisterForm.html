@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Реєстрація пристрою</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>Реєстрація нового пристрою</h1>
+    
+    <form action="/register" method="post" enctype="multipart/form-data">
+        <div>
+            <label>Назва пристрою*:</label><br>
+            <input type="text" name="inventory_name" required>
+        </div>
+        
+        <div>
+            <label>Опис:</label><br>
+            <textarea name="description" rows="4" cols="50"></textarea>
+        </div>
+        
+        <div>
+            <label>Фото:</label><br>
+            <input type="file" name="photo" accept="image/*">
+        </div>
+        
+        <br>
+        <button type="submit">Зареєструвати</button>
+    </form>
+</body>
+</html>

@@ -7,25 +7,39 @@ const http = require('http');
 const swaggerJsdoc = require('swagger-jsdoc'); //генерація OpenAPI-специфікації з коментарів
 const swaggerUi = require('swagger-ui-express'); //веб-інтерфейс для перегляду документації Swagger
 
+const runningInDocker = process.env.DOCKER === 'true';
 
-program
-  .requiredOption('-h, --host <host>', 'Адреса сервера')
-  .requiredOption('-p, --port <port>', 'Порт сервера')
-  .requiredOption('-c, --cache <path>', 'Шлях до директорії кешу')
-  .parse(process.argv);
+// Базові значення за замовчуванням
+let options = {
+  host: process.env.HOST || '0.0.0.0',
+  port: process.env.PORT || 3000,
+  cache: process.env.CACHE_DIR || './cache'
+};
 
-const options = program.opts();
+if (!runningInDocker) {
+  // Аргументи командного рядка використовуються лише локально
+  program
+    .option('-h, --host <host>', 'Адреса сервера', options.host)
+    .option('-p, --port <port>', 'Порт сервера', options.port)
+    .option('-c, --cache <path>', 'Шлях до директорії кешу', options.cache)
+    .parse(process.argv);
+
+  options = program.opts();
+}
+
+// ❗Просто закоментували, НІЧОГО НЕ ВИДАЛИЛИ
+// module.exports = options;
 
 // Перевіряємо/створюємо директорію кешу
-const cachePath = path.resolve(options.cache); //перетворюю шлях до кешу в абсолютний
+const cachePath = path.resolve(options.cache);
 if (!fs.existsSync(cachePath)) {
   console.log(`Створюю директорію кешу: ${cachePath}`);
-  fs.mkdirSync(cachePath, { recursive: true }); //синхронно створюю папку, і проміжні папки якщо треба
+  fs.mkdirSync(cachePath, { recursive: true });
 }
 
 const app = express();
-app.use(express.json()); //підтримка json у тілі запиту
-app.use(express.urlencoded({ extended: true })); //підтримка даних html-форм
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Swagger конфігурація
 const swaggerOptions = {
@@ -38,29 +52,29 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://${options.host}:${options.port}`,
+        url: `http://localhost:${options.port}`,
         description: 'Development server',
       },
     ],
   },
-  apis: ['./server.js'], //з цього файлу беруться коментарі для swagger
+  apis: ['./server.js'],
 };
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions); //cтворює об’єкт документації api і кладе його в swaggerSpec.
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // підключаю сторінку з документацією swagger за шляхом /docs
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Налаштування multer для завантаження файлів
+// Налаштування multer для файлів
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, cachePath);
   },
-  filename: (req, file, cb) => { //вказую куди саме зберігати файли
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9); //унікальна частина імені (час + випадкове число)
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, 'photo-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-const upload = multer({ storage }); //cтворюю middleware для завантаження файлів з цим сховищем
+const upload = multer({ storage });
 
 // "база даних" у пам'яті
 let inventory = [];
@@ -77,8 +91,8 @@ let nextId = 1;
  *       200:
  *         description: HTML-сторінка з формою реєстрації
  */
-app.get('/RegisterForm.html', (req, res) => { //маршрут для повернення сторінки з формою реєстрації
-  res.sendFile(path.join(__dirname, 'RegisterForm.html'));
+app.get('/RegisterForm.html', (req, res) => {
+  res.sendFile(path.resolve('RegisterForm.html')); 
 });
 
 /**
@@ -93,7 +107,7 @@ app.get('/RegisterForm.html', (req, res) => { //маршрут для повер
  *         description: HTML-сторінка з формою пошуку
  */
 app.get('/SearchForm.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'SearchForm.html'));
+  res.sendFile(path.resolve('SearchForm.html')); 
 });
 
 /**
@@ -128,10 +142,10 @@ app.get('/SearchForm.html', (req, res) => {
  *       400:
  *         description: Не вказано обов'язкові дані
  */
-app.post('/register', upload.single('photo'), (req, res) => { //маршрут для реєстрації нової речі (post/register)
+app.post('/register', upload.single('photo'), (req, res) => {
   const { inventory_name, description } = req.body;
 
-  if (!inventory_name) { //якщо назва не вказана
+  if (!inventory_name) {
     return res.status(400).json({ error: "Ім'я речі обов'язкове" });
   }
 
@@ -139,11 +153,10 @@ app.post('/register', upload.single('photo'), (req, res) => { //маршрут �
     id: nextId++,
     inventory_name,
     description: description || '',
-    photo_filename: req.file ? req.file.filename : null //ім'я файлу фото, якщо воно було завантажене
+    photo_filename: req.file ? req.file.filename : null
   };
 
-  inventory.push(newItem); //додаю нову річ до масиву інвентарю
-
+  inventory.push(newItem);
 
   res.status(201).json({
     message: 'Пристрій успішно зареєстрований',
@@ -162,15 +175,15 @@ app.post('/register', upload.single('photo'), (req, res) => { //маршрут �
  *       200:
  *         description: Список усіх зареєстрованих речей
  */
-app.get('/inventory', (req, res) => { //маршрут для отримання списку всіх речей 
-  const inventoryWithUrls = inventory.map(item => ({ //формується новий масив з додатковим полем photo_url
+app.get('/inventory', (req, res) => {
+  const inventoryWithUrls = inventory.map(item => ({
     id: item.id,
     inventory_name: item.inventory_name,
     description: item.description,
     photo_url: item.photo_filename ? `/inventory/${item.id}/photo` : null
   }));
 
-  res.json(inventoryWithUrls);  //відправляємо список речей у форматі json
+  res.json(inventoryWithUrls);
 });
 
 /**
@@ -193,10 +206,9 @@ app.get('/inventory', (req, res) => { //маршрут для отримання
  *       404:
  *         description: Річ не знайдена
  */
-app.get('/inventory/:id', (req, res) => { //маршрут для отримання інформації про одну річ за id
-
-  const itemId = parseInt(req.params.id, 10); //бере параметр id з url і переводимо його в число
-  const item = inventory.find(i => i.id === itemId); //шкає річ з таким id у масиві inventory
+app.get('/inventory/:id', (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const item = inventory.find(i => i.id === itemId);
 
   if (!item) {
     return res.status(404).json({ error: 'Річ не знайдена' });
@@ -243,18 +255,18 @@ app.get('/inventory/:id', (req, res) => { //маршрут для отриман
  *       404:
  *         description: Річ не знайдена
  */
-app.put('/inventory/:id', (req, res) => { //маршрут для оновлення назви або опису речі
-  const itemId = parseInt(req.params.id, 10); //отримую id з url
+app.put('/inventory/:id', (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
   const item = inventory.find(i => i.id === itemId);
 
   if (!item) {
     return res.status(404).json({ error: 'Річ не знайдена' });
   }
 
-  const { inventory_name, description } = req.body; //бере нові можливі значення зтіла запиту
+  const { inventory_name, description } = req.body;
 
-  if (inventory_name !== undefined) { //якщо в запиті передано нову назву
-    item.inventory_name = inventory_name //оновлює назву
+  if (inventory_name !== undefined) {
+    item.inventory_name = inventory_name;
   }
 
   if (description !== undefined) {
@@ -284,16 +296,16 @@ app.put('/inventory/:id', (req, res) => { //маршрут для оновлен
  *       404:
  *         description: Фото не знайдено
  */
-app.get('/inventory/:id/photo', (req, res) => { //маршрут для отримання фото речі
-  const itemId = parseInt(req.params.id, 10);  //отримує id з url
-  const item = inventory.find(i => i.id === itemId); // шукає відповіну річ
+app.get('/inventory/:id/photo', (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const item = inventory.find(i => i.id === itemId);
 
-  if (!item || !item.photo_filename) { //якщо речі немає або у неї немає фото
+  if (!item || !item.photo_filename) {
     return res.status(404).json({ error: 'Фото не знайдено' });
   }
 
-  const photoPath = path.join(cachePath, item.photo_filename); //формує повний шлях до файлу фото
-  if (!fs.existsSync(photoPath)) { //перевіряє, чи фото фізично існує на диску
+  const photoPath = path.join(cachePath, item.photo_filename);
+  if (!fs.existsSync(photoPath)) {
     return res.status(404).json({ error: 'Файл фото не знайдено' });
   }
 
@@ -336,27 +348,25 @@ app.get('/inventory/:id/photo', (req, res) => { //маршрут для отри
  *       404:
  *         description: Річ не знайдена
  */
-app.put('/inventory/:id/photo', upload.single('photo'), (req, res) => { //маршрут для оновлення фото речі
-  const itemId = parseInt(req.params.id, 10); // отримує id з url
-  const item = inventory.find(i => i.id === itemId); // шукає річ з таким id 
+app.put('/inventory/:id/photo', upload.single('photo'), (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const item = inventory.find(i => i.id === itemId);
 
   if (!item) {
     return res.status(404).json({ error: 'Річ не знайдена' });
   }
 
-  if (!req.file) { //якщо клієнт не передав файл у запиті
-    return res.status(400).json({ error: 'Фото обов\'язкове для оновлення' });
+  if (!req.file) {
+    return res.status(400).json({ error: 'Фото обов\'язкове' });
   }
 
-  // Видаляємо старе фото, якщо воно було
-  if (item.photo_filename) { // якщо  у реі вже було фото
-    const oldPhotoPath = path.join(cachePath, item.photo_filename);
-    if (fs.existsSync(oldPhotoPath)) { //якщо старий файл існує
-      fs.unlinkSync(oldPhotoPath); 
-    }
+  if (item.photo_filename) {
+    const oldPath = path.join(cachePath, item.photo_filename);
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
   }
- 
-  item.photo_filename = req.file.filename; //записує ім'я нового файлу фото для цієї речі
+
+  item.photo_filename = req.file.filename;
+
   res.json({ message: 'Фото оновлено успішно' });
 });
 
@@ -380,24 +390,22 @@ app.put('/inventory/:id/photo', upload.single('photo'), (req, res) => { //мар
  *       404:
  *         description: Річ не знайдена
  */
-app.delete('/inventory/:id', (req, res) => { //маршрут для видалення речі з інвентаря
-  const itemId = parseInt(req.params.id, 10); //отримує id з url
-  const itemIndex = inventory.findIndex(i => i.id === itemId); //знаходить індекс реі в масиві
+app.delete('/inventory/:id', (req, res) => {
+  const itemId = parseInt(req.params.id, 10);
+  const index = inventory.findIndex(i => i.id === itemId);
 
-  if (itemIndex === -1) {
+  if (index === -1) {
     return res.status(404).json({ error: 'Річ не знайдена' });
   }
 
-  const item = inventory[itemIndex]; //бере стару річ перед видаленням
+  const item = inventory[index];
 
-  if (item.photo_filename) { //якщо у речі було фото
-    const photoPath = path.join(cachePath, item.photo_filename); //шлях до файлу фото
-    if (fs.existsSync(photoPath)) { //перевіряє чи фал існує
-      fs.unlinkSync(photoPath);
-    }
+  if (item.photo_filename) {
+    const photoPath = path.join(cachePath, item.photo_filename);
+    if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
   }
 
-  inventory.splice(itemIndex, 1); //видаляємо річ з масиву inventory
+  inventory.splice(index, 1);
 
   res.json({ message: 'Річ успішно видалена' });
 });
@@ -428,43 +436,52 @@ app.delete('/inventory/:id', (req, res) => { //маршрут для видал�
  *       404:
  *         description: Річ не знайдена
  */
-app.post('/search', (req, res) => { //маршрут для пошуку речі за id (через html-форму)
+app.post('/search', (req, res) => {
   const { id, has_photo } = req.body;
-  const itemId = parseInt(id, 10); //перетворюємо id з рядка в число
+
+  const itemId = parseInt(id, 10);
   const item = inventory.find(i => i.id === itemId);
 
   if (!item) {
     return res.status(404).json({ error: 'Річ не знайдена' });
   }
 
-  const responseItem = { //формує базову відповідь
+  const result = {
     id: item.id,
     inventory_name: item.inventory_name,
     description: item.description
   };
 
-  if (has_photo === 'on' && item.photo_filename) { //якщо користувач хоче посилання на фото і фото існує
-    responseItem.photo_url = `/inventory/${item.id}/photo`;
+  if (has_photo === 'on' && item.photo_filename) {
+    result.photo_url = `/inventory/${item.id}/photo`;
   }
 
-  res.json(responseItem); //повертає знайдену річ у форматі json
-});
-  
-// Обробка невідомих маршрутів/методів
-app.use((req, res) => {
-  res.status(405).json({ error: 'Метод не дозволений' });
+  res.json(result);
 });
 
-// Створюємо HTTP сервер з допомогою модуля http
+// Обробка невідомих маршрутів
+app.use((req, res) => {
+  res.status(404).json({ error: 'Маршрут не знайдено' });
+});
+
+
+// Запуск сервера
 const server = http.createServer(app);
 
-// Запускаємо сервер з параметрами --host та --port
 server.listen(options.port, options.host, () => {
-  console.log('=== Сервіс інвентаризації ===');
-  console.log(`Сервер запущено: http://${options.host}:${options.port}`);
-  console.log(`Директорія кешу: ${cachePath}`);
-  console.log(`Swagger документація: http://${options.host}:${options.port}/docs`);
-  console.log('=============================');
+  console.log("=======================================");
+  console.log(" Сервіс інвентаризації запущено");
+  console.log("=======================================\n");
+
+  console.log(` Сервер працює на  :  http://localhost:${options.port}`);
+  console.log(` Swagger Docs      :  http://localhost:${options.port}/docs\n`);
+
+  console.log(" Доступні сторінки:");
+  console.log(` • Реєстрація      :  http://localhost:${options.port}/RegisterForm.html`);
+  console.log(` • Пошук           :  http://localhost:${options.port}/SearchForm.html\n`);
+
+  console.log(` Директорія кешу   :  ${cachePath}`);
+  console.log("=======================================");
 });
 
 module.exports = app;
